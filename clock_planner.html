@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Clock Planner</title>
+<link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0f0f13;
+  --surface:#1a1a22;
+  --surface2:#22222e;
+  --border:#2e2e3e;
+  --text:#e8e8f0;
+  --text2:#888899;
+  --accent:#7c6ff7;
+  --accent2:#5a52c8;
+  --red:#e05c6e;
+}
+body{background:var(--bg);color:var(--text);font-family:'Sarabun',sans-serif;min-height:100vh;padding:1.5rem 1rem}
+h1{font-size:1.1rem;font-weight:500;color:var(--text2);text-align:center;letter-spacing:0.1em;text-transform:uppercase;margin-bottom:1.5rem}
+.wrap{max-width:480px;margin:0 auto;display:flex;flex-direction:column;align-items:center;gap:1.25rem}
+.tabs{display:flex;width:100%;border:1px solid var(--border);border-radius:10px;overflow:hidden}
+.tab{flex:1;height:36px;font-size:13px;font-family:'Sarabun',sans-serif;font-weight:500;border:none;cursor:pointer;background:var(--surface);color:var(--text2);transition:all .2s}
+.tab.active{background:var(--accent);color:#fff}
+.clock-container{position:relative;width:300px;height:300px;cursor:crosshair}
+canvas{position:absolute;top:0;left:0}
+.hint{font-size:11px;color:var(--text2);text-align:center}
+.panel{width:100%;background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:1rem}
+.panel-title{font-size:12px;font-weight:600;color:var(--text2);letter-spacing:0.08em;text-transform:uppercase;margin-bottom:12px}
+.add-form{display:flex;flex-direction:column;gap:8px}
+.row{display:flex;gap:8px;align-items:center}
+input[type=text],select{flex:1;height:36px;padding:0 10px;font-size:13px;font-family:'Sarabun',sans-serif;border:1px solid var(--border);border-radius:8px;background:var(--surface2);color:var(--text);outline:none}
+input[type=text]:focus,select:focus{border-color:var(--accent)}
+select option{background:var(--surface2)}
+.sep{font-size:13px;color:var(--text2)}
+.btn{height:36px;padding:0 16px;font-size:13px;font-family:'Sarabun',sans-serif;font-weight:500;border:1px solid var(--border);border-radius:8px;background:var(--surface2);color:var(--text);cursor:pointer;transition:all .15s}
+.btn:hover{border-color:var(--accent);color:var(--accent)}
+.btn-primary{background:var(--accent);color:#fff;border-color:transparent}
+.btn-primary:hover{background:var(--accent2);color:#fff}
+.task-list{display:flex;flex-direction:column;gap:6px;max-height:240px;overflow-y:auto}
+.task-item{display:flex;align-items:center;gap:10px;padding:8px 10px;border:1px solid var(--border);border-radius:8px;background:var(--surface2)}
+.task-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0}
+.task-info{flex:1;min-width:0}
+.task-name{font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.task-time{font-size:11px;color:var(--text2)}
+.task-del{background:none;border:none;cursor:pointer;color:var(--text2);font-size:18px;padding:0 2px;line-height:1;transition:color .15s}
+.task-del:hover{color:var(--red)}
+.empty{font-size:13px;color:var(--text2);text-align:center;padding:1rem 0}
+input[type=color]{height:36px;padding:2px 3px;width:44px;border:1px solid var(--border);border-radius:8px;background:var(--surface2);cursor:pointer}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Clock Planner</h1>
+
+  <div class="tabs">
+    <button class="tab active" onclick="setMode('am')">AM · 00:00–11:59</button>
+    <button class="tab" onclick="setMode('pm')">PM · 12:00–23:59</button>
+  </div>
+
+  <div class="clock-container">
+    <canvas id="bgCanvas" width="300" height="300"></canvas>
+    <canvas id="taskCanvas" width="300" height="300"></canvas>
+    <canvas id="handCanvas" width="300" height="300"></canvas>
+  </div>
+  <p class="hint">คลิกบนวงแหวนเพื่อเลือกเวลาเริ่ม–จบ</p>
+
+  <div class="panel">
+    <p class="panel-title">เพิ่ม task</p>
+    <div class="add-form">
+      <input type="text" id="taskName" placeholder="ชื่อ task..." />
+      <div class="row">
+        <select id="startH"></select>
+        <span class="sep">—</span>
+        <select id="endH"></select>
+      </div>
+      <div class="row">
+        <input type="color" id="taskColor" value="#7c6ff7">
+        <button class="btn btn-primary" onclick="addTask()" style="flex:1">+ เพิ่ม</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <p class="panel-title">รายการทั้งหมด</p>
+    <div class="task-list" id="taskList"><p class="empty">ยังไม่มี task</p></div>
+  </div>
+</div>
+
+<script>
+let mode='am', tasks=[], dragStart=null;
+const cx=150,cy=150,r=138,inner=76;
+
+function pad(n){return String(n).padStart(2,'0')}
+function hToAngle(h12){return(h12/12)*Math.PI*2-Math.PI/2}
+function posToHour12(x,y){
+  const dx=x-cx,dy=y-cy;
+  let a=Math.atan2(dy,dx)+Math.PI/2;
+  if(a<0)a+=Math.PI*2;
+  return Math.floor(a/(Math.PI*2)*12);
+}
+function isOnRing(x,y){
+  const d=Math.sqrt((x-cx)**2+(y-cy)**2);
+  return d>=inner&&d<=r;
+}
+function h12to24(h){return mode==='pm'?h+12:h}
+
+const bgC=document.getElementById('bgCanvas');
+const taskC=document.getElementById('taskCanvas');
+const handC=document.getElementById('handCanvas');
+const bgX=bgC.getContext('2d');
+const taskX=taskC.getContext('2d');
+const handX=handC.getContext('2d');
+
+function drawBg(){
+  bgX.clearRect(0,0,300,300);
+  bgX.beginPath();bgX.arc(cx,cy,r,0,Math.PI*2);
+  bgX.fillStyle='#1a1a2e';bgX.fill();
+  bgX.strokeStyle='#2e2e4e';bgX.lineWidth=1;bgX.stroke();
+  bgX.beginPath();bgX.arc(cx,cy,inner,0,Math.PI*2);
+  bgX.strokeStyle='#2e2e4e';bgX.lineWidth=0.5;bgX.stroke();
+  for(let h=0;h<12;h++){
+    const a=hToAngle(h);
+    const isMajor=h%3===0;
+    bgX.beginPath();
+    bgX.moveTo(cx+Math.cos(a)*(isMajor?r-4:r-2),cy+Math.sin(a)*(isMajor?r-4:r-2));
+    bgX.lineTo(cx+Math.cos(a)*(isMajor?r-16:r-9),cy+Math.sin(a)*(isMajor?r-16:r-9));
+    bgX.strokeStyle=isMajor?'#5a5a7a':'#3a3a5a';bgX.lineWidth=isMajor?1.5:0.7;bgX.stroke();
+    if(isMajor||h%2===0){
+      const v=h12to24(h);
+      bgX.fillStyle='#666680';
+      bgX.font=`${isMajor?11:9}px Sarabun,sans-serif`;
+      bgX.textAlign='center';bgX.textBaseline='middle';
+      const tr=inner+14;
+      bgX.fillText(pad(v)+':00',cx+Math.cos(a)*tr,cy+Math.sin(a)*tr);
+    }
+  }
+  bgX.fillStyle='#3a3a5a';
+  bgX.font='bold 12px Sarabun,sans-serif';
+  bgX.textAlign='center';bgX.textBaseline='middle';
+  bgX.fillText(mode.toUpperCase(),cx,cy);
+}
+
+function drawTasks(){
+  taskX.clearRect(0,0,300,300);
+  tasks.forEach(t=>{
+    const inAM=t.start<12, inPM=t.start>=12;
+    if((mode==='am'&&!inAM)||(mode==='pm'&&!inPM))return;
+    const s12=t.start%12, e12=t.end%12;
+    const a1=hToAngle(s12);
+    const a2=hToAngle(e12<=s12?e12+12:e12);
+    taskX.beginPath();
+    taskX.moveTo(cx+Math.cos(a1)*inner,cy+Math.sin(a1)*inner);
+    taskX.arc(cx,cy,r-1,a1,a2);
+    taskX.arc(cx,cy,inner+1,a2,a1,true);
+    taskX.closePath();
+    taskX.fillStyle=t.color+'bb';taskX.fill();
+    const amid=(a1+a2)/2, tmid=(r+inner)/2;
+    taskX.save();
+    taskX.translate(cx+Math.cos(amid)*tmid,cy+Math.sin(amid)*tmid);
+    taskX.rotate(amid+Math.PI/2);
+    taskX.fillStyle='#fff';
+    taskX.font='500 10px Sarabun,sans-serif';
+    taskX.textAlign='center';taskX.textBaseline='middle';
+    if((a2-a1)*tmid>18){
+      taskX.fillText(t.name.length>8?t.name.slice(0,7)+'…':t.name,0,0);
+    }
+    taskX.restore();
+  });
+}
+
+function drawHand(){
+  handX.clearRect(0,0,300,300);
+  const now=new Date();
+  const h24=now.getHours()+(now.getMinutes()/60);
+  if((mode==='am'&&h24>=12)||(mode==='pm'&&h24<12))return;
+  const a=hToAngle(h24%12);
+  handX.beginPath();handX.moveTo(cx,cy);
+  handX.lineTo(cx+Math.cos(a)*(r-8),cy+Math.sin(a)*(r-8));
+  handX.strokeStyle='#e05c6e';handX.lineWidth=2;handX.stroke();
+  handX.beginPath();handX.arc(cx,cy,4,0,Math.PI*2);
+  handX.fillStyle='#e05c6e';handX.fill();
+}
+
+taskC.addEventListener('mousedown',e=>{
+  const rect=taskC.getBoundingClientRect();
+  const x=(e.clientX-rect.left)*(300/rect.width);
+  const y=(e.clientY-rect.top)*(300/rect.height);
+  if(isOnRing(x,y))dragStart=posToHour12(x,y);
+});
+taskC.addEventListener('mouseup',e=>{
+  if(dragStart===null)return;
+  const rect=taskC.getBoundingClientRect();
+  const x=(e.clientX-rect.left)*(300/rect.width);
+  const y=(e.clientY-rect.top)*(300/rect.height);
+  if(isOnRing(x,y)){
+    const end=posToHour12(x,y);
+    document.getElementById('startH').value=h12to24(dragStart);
+    document.getElementById('endH').value=h12to24(end===dragStart?(dragStart+1)%12:end);
+  }
+  dragStart=null;
+});
+taskC.addEventListener('touchstart',e=>{
+  e.preventDefault();
+  const t=e.touches[0];
+  const rect=taskC.getBoundingClientRect();
+  const x=(t.clientX-rect.left)*(300/rect.width);
+  const y=(t.clientY-rect.top)*(300/rect.height);
+  if(isOnRing(x,y))dragStart=posToHour12(x,y);
+},{passive:false});
+taskC.addEventListener('touchend',e=>{
+  if(dragStart===null)return;
+  const t=e.changedTouches[0];
+  const rect=taskC.getBoundingClientRect();
+  const x=(t.clientX-rect.left)*(300/rect.width);
+  const y=(t.clientY-rect.top)*(300/rect.height);
+  if(isOnRing(x,y)){
+    const end=posToHour12(x,y);
+    document.getElementById('startH').value=h12to24(dragStart);
+    document.getElementById('endH').value=h12to24(end===dragStart?(dragStart+1)%12:end);
+  }
+  dragStart=null;
+});
+
+function buildSelects(){
+  const sh=document.getElementById('startH'),eh=document.getElementById('endH');
+  const off=mode==='pm'?12:0;
+  sh.innerHTML='';eh.innerHTML='';
+  for(let h=0;h<12;h++){
+    const v=h+off;
+    sh.innerHTML+=`<option value="${v}">${pad(v)}:00</option>`;
+    eh.innerHTML+=`<option value="${v}">${pad(v)}:00</option>`;
+  }
+  if(eh.options.length>1)eh.selectedIndex=1;
+}
+
+function setMode(m){
+  mode=m;
+  document.querySelectorAll('.tab').forEach((t,i)=>t.classList.toggle('active',(i===0&&m==='am')||(i===1&&m==='pm')));
+  buildSelects();drawBg();drawTasks();drawHand();
+}
+
+function renderList(){
+  const el=document.getElementById('taskList');
+  if(!tasks.length){el.innerHTML='<p class="empty">ยังไม่มี task</p>';return;}
+  el.innerHTML=tasks.map((t,i)=>`
+    <div class="task-item">
+      <div class="task-dot" style="background:${t.color}"></div>
+      <div class="task-info">
+        <div class="task-name">${t.name}</div>
+        <div class="task-time">${pad(t.start)}:00 – ${pad(t.end)}:00</div>
+      </div>
+      <button class="task-del" onclick="removeTask(${i})">×</button>
+    </div>`).join('');
+}
+
+function addTask(){
+  const name=document.getElementById('taskName').value.trim();
+  const start=+document.getElementById('startH').value;
+  const end=+document.getElementById('endH').value;
+  const color=document.getElementById('taskColor').value;
+  if(!name)return;
+  tasks.push({name,start,end,color});
+  save();
+  document.getElementById('taskName').value='';
+  drawTasks();renderList();
+}
+
+function removeTask(i){tasks.splice(i,1);save();drawTasks();renderList();}
+function save(){try{localStorage.setItem('cplanner',JSON.stringify(tasks));}catch(e){}}
+function load(){try{const d=localStorage.getItem('cplanner');if(d)tasks=JSON.parse(d);}catch(e){}}
+
+load();buildSelects();drawBg();drawTasks();drawHand();
+setInterval(drawHand,15000);
+</script>
+</body>
+</html>
