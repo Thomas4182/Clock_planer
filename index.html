@@ -32,6 +32,10 @@
 body{background:var(--bg);color:var(--text);font-family:'Sarabun',sans-serif;min-height:100vh;padding:1.5rem 1rem}
 h1{font-size:1.1rem;font-weight:500;color:var(--text2);text-align:center;letter-spacing:0.1em;text-transform:uppercase;margin-bottom:1.5rem}
 .wrap{max-width:480px;margin:0 auto;display:flex;flex-direction:column;align-items:center;gap:1.25rem}
+.help-wrap{position:relative;display:flex;align-items:center;gap:8px}
+.help-btn{width:26px;height:26px;border:none;border-radius:50%;background:var(--surface2);color:var(--text2);cursor:pointer;font-size:13px;display:flex;align-items:center;justify-content:center}
+.help-box{position:absolute;top:34px;right:0;width:240px;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:10px;box-shadow:0 8px 24px rgba(0,0,0,.25);font-size:12px;line-height:1.5;color:var(--text2);display:none;z-index:10}
+.help-box.show{display:block}
 .tabs{display:flex;width:100%;border:1px solid var(--border);border-radius:10px;overflow:hidden}
 .tab{flex:1;height:36px;font-size:13px;font-family:'Sarabun',sans-serif;font-weight:500;border:none;cursor:pointer;background:var(--surface);color:var(--text2);transition:all .2s}
 .tab.active{background:var(--accent);color:#fff}
@@ -65,8 +69,22 @@ input[type=color]{height:36px;padding:2px 3px;width:44px;border:1px solid var(--
 <body>
 <div class="wrap">
   <div style="display:flex;align-items:center;justify-content:center;gap:12px;width:100%">
-    <h1 style="margin:0">Clock Planner</h1>
+    <div class="help-wrap">
+      <h1 style="margin:0">Clock Planner</h1>
+    </div>
     <button id="themeBtn" onclick="toggleTheme()" style="background:var(--surface2);border:1px solid var(--border);border-radius:20px;padding:4px 12px;font-size:12px;font-family:'Sarabun',sans-serif;color:var(--text2);cursor:pointer;transition:all .2s">🌙 มืด</button>
+    <button class="help-btn" onclick="toggleHelp()" aria-label="ช่วยเหลือ">❓</button>
+      <div id="helpBox" class="help-box">
+        ใช้เว็บนี้เพื่อวางแผนเวลาได้ง่าย ๆ เป็นรูปแบบนาฬิกา 24 ชั่วโมง<br>
+        เวลาที่แสดงจะอิงตามเวลาของเครื่องคุณ<br>
+        <br>
+        (วิธีการใช้งาน)<br>
+        • ใส่ชื่อ task และเลือกเวลาเริ่ม–จบ<br>
+        • เลือกสีและเพิ่ม task <br>
+        • สามารถบันทึกเป็นแบบชุดเวลาที่คุณเคยลงไว้ได้และโหลดกลับมาได้<br>
+        • ใช้ปุ่มสลับโหมด AM/PM เพื่อดู task ในช่วงเวลาเช้าและบ่าย<br>
+        • สามารถลาก task ในรายการเพื่อจัดลำดับใหม่ได้<br>
+      </div>
   </div>
   <p id="currentDate" class="current-date"></p>
 
@@ -80,7 +98,6 @@ input[type=color]{height:36px;padding:2px 3px;width:44px;border:1px solid var(--
     <canvas id="taskCanvas" width="300" height="300"></canvas>
     <canvas id="handCanvas" width="300" height="300"></canvas>
   </div>
-  <p class="hint">คลิกบนวงแหวนเพื่อเลือกเวลาเริ่ม–จบ</p>
 
   <div class="panel">
     <p class="panel-title">เพิ่ม task</p>
@@ -444,6 +461,9 @@ function toggleTheme(){
   document.getElementById('themeBtn').textContent=isLight?'☀️ สว่าง':'🌙 มืด';
   try{localStorage.setItem('theme',isLight?'light':'dark');}catch(e){}
   drawBg();drawTasks();drawHand();
+}
+function toggleHelp(){
+  document.getElementById('helpBox').classList.toggle('show');
 }
 function loadTheme(){
   try{
