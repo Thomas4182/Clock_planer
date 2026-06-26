@@ -14,7 +14,7 @@
   --border:#2e2e3e;
   --text:#e8e8f0;
   --text2:#888899;
-  --accent:#7c6ff7;
+  --accent:#7f2515;
   --accent2:#5a52c8;
   --red:#e05c6e;
 }
@@ -25,7 +25,7 @@
   --border:#d0d0e0;
   --text:#1a1a2e;
   --text2:#666680;
-  --accent:#7c6ff7;
+  --accent:#7f2515;
   --accent2:#5a52c8;
   --red:#e05c6e;
 }
@@ -51,7 +51,7 @@ select option{background:var(--surface2)}
 .btn-primary{background:var(--accent);color:#fff;border-color:transparent}
 .btn-primary:hover{background:var(--accent2);color:#fff}
 .task-list{display:flex;flex-direction:column;gap:6px;max-height:200px;overflow-y:auto;padding-right:4px}
-.task-item{display:flex;align-items:center;gap:10px;padding:8px 10px;border:1px solid var(--border);border-radius:8px;background:var(--surface2)}
+.task-item{display:flex;align-items:center;gap:10px;padding:8px 10px;border:1px solid var(--border);border-radius:8px;background:var(--surface2);touch-action:pan-y}
 .task-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0}
 .task-info{flex:1;min-width:0}
 .task-name{font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -68,6 +68,7 @@ input[type=color]{height:36px;padding:2px 3px;width:44px;border:1px solid var(--
     <h1 style="margin:0">Clock Planner</h1>
     <button id="themeBtn" onclick="toggleTheme()" style="background:var(--surface2);border:1px solid var(--border);border-radius:20px;padding:4px 12px;font-size:12px;font-family:'Sarabun',sans-serif;color:var(--text2);cursor:pointer;transition:all .2s">🌙 มืด</button>
   </div>
+  <p id="currentDate" class="current-date"></p>
 
   <div class="tabs">
     <button class="tab active" onclick="setMode('am')">AM · 00:00–11:59</button>
@@ -91,7 +92,7 @@ input[type=color]{height:36px;padding:2px 3px;width:44px;border:1px solid var(--
         <select id="endH"></select>
       </div>
       <div class="row">
-        <input type="color" id="taskColor" value="#7c6ff7">
+        <input type="color" id="taskColor" value="#f59e0b">
         <button class="btn btn-primary" onclick="addTask()" style="flex:1">+ เพิ่ม</button>
       </div>
     </div>
@@ -100,6 +101,21 @@ input[type=color]{height:36px;padding:2px 3px;width:44px;border:1px solid var(--
   <div class="panel">
     <p class="panel-title">รายการทั้งหมด</p>
     <div class="task-list" id="taskList"><p class="empty">ยังไม่มี task</p></div>
+  </div>
+
+  <div class="panel">
+    <p class="panel-title">บันทึก Preset</p>
+    <div class="add-form">
+      <input type="text" id="presetName" placeholder="ชื่อเซฟ..." />
+      <div class="row">
+        <select id="presetSelect"></select>
+      </div>
+      <div class="row">
+        <button class="btn btn-primary" onclick="savePreset()" style="flex:1">บันทึกเซฟ</button>
+        <button class="btn" onclick="loadPreset()" style="flex:1">โหลดเซฟ</button>
+        <button class="btn" onclick="deletePreset()" style="flex:1">ลบเซฟ</button>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -264,10 +280,13 @@ function renderList(){
   const el=document.getElementById('taskList');
   if(!tasks.length){el.innerHTML='<p class="empty">ยังไม่มี task</p>';return;}
   el.innerHTML=tasks.map((t,i)=>`
-    <div class="task-item" draggable="true" 
+    <div class="task-item" draggable="true" data-index="${i}"
       ondragstart="dragStart2(event,${i})"
       ondragover="event.preventDefault()"
       ondrop="dragDrop(event,${i})"
+      ontouchstart="touchDragStart(event,${i})"
+      ontouchend="touchDragEnd(event)"
+      ontouchcancel="touchDragCancel(event)"
       style="cursor:grab">
       <div class="task-dot" style="background:${t.color}"></div>
       <div class="task-info">
@@ -280,11 +299,31 @@ function renderList(){
 
 let dragIdx=null;
 function dragStart2(e,i){dragIdx=i;}
+function touchDragStart(e,i){
+  if(e.touches.length!==1) return;
+  dragIdx=i;
+}
+function touchDragEnd(e){
+  if(dragIdx===null) return;
+  const t=e.changedTouches[0];
+  const el=document.elementFromPoint(t.clientX,t.clientY);
+  const target=el&&el.closest('.task-item');
+  if(target){
+    const idx=Number(target.dataset.index);
+    if(!Number.isNaN(idx)) moveTask(dragIdx, idx);
+  }
+  dragIdx=null;
+}
+function touchDragCancel(){ dragIdx=null; }
 function dragDrop(e,i){
   if(dragIdx===null||dragIdx===i)return;
-  const tmp=tasks.splice(dragIdx,1)[0];
-  tasks.splice(i,0,tmp);
+  moveTask(dragIdx, i);
   dragIdx=null;
+}
+function moveTask(from,to){
+  if(from===to) return;
+  const tmp=tasks.splice(from,1)[0];
+  tasks.splice(to,0,tmp);
   save();drawTasks();renderList();
 }
 
@@ -293,25 +332,112 @@ function toTimeStr(v){
   const m=Math.round((v-h)*60);
   return `${pad(h)}:${pad(m)}`;
 }
-
 function addTask(){
   const name=document.getElementById('taskName').value.trim();
   const start=+document.getElementById('startH').value;
   const end=+document.getElementById('endH').value;
   const color=document.getElementById('taskColor').value;
   if(!name){
-  alert('ยังไม่ได้ใส่ชื่อ task นะ');
-  document.getElementById('taskName').focus();
-  return;
-}
+    alert('ยังไม่ได้ใส่ชื่อ task นะ');
+    document.getElementById('taskName').focus();
+    return;
+  }
   tasks.push({name,start,end,color});
   save();
   drawTasks();renderList();
+  document.getElementById('taskName').value='';
 }
+
+let presets=[];
 
 function removeTask(i){tasks.splice(i,1);save();drawTasks();renderList();}
 function save(){try{localStorage.setItem('cplanner',JSON.stringify(tasks));}catch(e){}}
-function load(){try{const d=localStorage.getItem('cplanner');if(d)tasks=JSON.parse(d);}catch(e){}}
+function load(){
+  try{
+    const d=localStorage.getItem('cplanner');
+    if(d){
+      tasks=JSON.parse(d);
+    }
+  }catch(e){}
+  loadPresets();
+}
+
+function savePreset(){
+  const name=document.getElementById('presetName').value.trim();
+  if(!name){
+    alert('กรุณากรอกชื่อเซฟก่อนบันทึก');
+    document.getElementById('presetName').focus();
+    return;
+  }
+  const preset={name,tasks:JSON.parse(JSON.stringify(tasks))};
+  const existing=presets.findIndex(p=>p.name===name);
+  if(existing>=0){
+    presets[existing]=preset;
+  } else {
+    presets.push(preset);
+  }
+  savePresets();
+  renderPresetOptions();
+  alert('บันทึกเซฟเรียบร้อยแล้ว');
+}
+
+function loadPreset(){
+  const select=document.getElementById('presetSelect');
+  if(!select||select.value===''){
+    alert('กรุณาเลือกเซฟที่ต้องการโหลด');
+    return;
+  }
+  const preset=presets[Number(select.value)];
+  if(!preset) return;
+  tasks=JSON.parse(JSON.stringify(preset.tasks));
+  save();drawTasks();renderList();
+  alert(`โหลดเซฟ "${preset.name}" เรียบร้อยแล้ว`);
+}
+
+function deletePreset(){
+  const select=document.getElementById('presetSelect');
+  if(!select||select.value===''){
+    alert('กรุณาเลือกเซฟก่อนลบ');
+    return;
+  }
+  const index=Number(select.value);
+  const preset=presets[index];
+  if(!preset) return;
+  if(!confirm(`ยืนยันลบเซฟ "${preset.name}" ?`)) return;
+  presets.splice(index,1);
+  savePresets();
+  renderPresetOptions();
+  alert('ลบเซฟเรียบร้อยแล้ว');
+}
+
+function savePresets(){
+  try{localStorage.setItem('cplanner_presets',JSON.stringify(presets));}catch(e){}
+}
+
+function loadPresets(){
+  try{
+    const d=localStorage.getItem('cplanner_presets');
+    presets=d?JSON.parse(d):[];
+  }catch(e){presets=[];}
+  renderPresetOptions();
+}
+
+function renderPresetOptions(){
+  const select=document.getElementById('presetSelect');
+  if(!select) return;
+  if(!presets.length){
+    select.innerHTML='<option value="">ยังไม่มี preset</option>';
+    return;
+  }
+  select.innerHTML=`<option value="">เลือก preset...</option>`+presets.map((p,i)=>`<option value="${i}">${p.name}</option>`).join('');
+}
+
+function updateCurrentDate(){
+  const d=new Date();
+  const dateStr=`${pad(d.getDate())}/${pad(d.getMonth()+1)}/${d.getFullYear()}`;
+  const el=document.getElementById('currentDate');
+  if(el) el.textContent=dateStr;
+}
 
 function toggleTheme(){
   const isLight=document.documentElement.classList.toggle('light');
@@ -328,7 +454,7 @@ function loadTheme(){
     }
   }catch(e){}
 }
-loadTheme();load();buildSelects();drawBg();drawTasks();drawHand();renderList();
+loadTheme();load();buildSelects();drawBg();drawTasks();drawHand();renderList();renderPresetOptions();updateCurrentDate();
 setInterval(drawHand,15000);
 </script>
 </body>
